@@ -9,7 +9,7 @@ const integer = (n: unknown, max: number): n is number => typeof n === 'number' 
 export function validate(value: unknown): Scenario {
   if (!value || typeof value !== 'object') throw new Error('庭のデータがありません')
   const s = value as Scenario
-  if (s.v !== 1 || !integer(s.seed, 999999) || !integer(s.tick, MAX_TICK) || !RULES.includes(s.rule) || typeof s.note !== 'string' || Array.from(s.note).length > MAX_NOTE || !Array.isArray(s.edits) || s.edits.length > MAX_EDITS || s.edits.some(e => !e || !integer(e.t, MAX_TICK) || !integer(e.i, CELLS - 1))) throw new Error('庭のデータが範囲外です')
+  if (s.v !== 1 || !integer(s.seed, 999999) || !integer(s.tick, MAX_TICK) || !RULES.includes(s.rule) || typeof s.note !== 'string' || Array.from(s.note).length > MAX_NOTE || !Array.isArray(s.edits) || s.edits.length > MAX_EDITS || Array.from(s.edits).some(e => !e || !integer(e.t, MAX_TICK) || !integer(e.i, CELLS - 1))) throw new Error('庭のデータが範囲外です')
   return { v: 1, seed: s.seed, rule: s.rule, tick: s.tick, note: s.note, edits: s.edits.map(e => ({ t: e.t, i: e.i })) }
 }
 export function seedBoard(seed: number): Board {
@@ -58,7 +58,7 @@ export function stats(s: Scenario) {
 }
 export function seek(s: Scenario, tick: number): Scenario { return validate({ ...s, tick }) }
 export function plant(s: Scenario, i: number): Scenario {
-  if (s.edits.length >= MAX_EDITS) throw new Error('一つの庭は32手まで。時間を戻すか、新しい庭へ。')
+  if (s.edits.length >= MAX_EDITS) throw new Error('一つの庭は32手まで。最後の一手を取り消すか、新しい庭へ。')
   return validate({ ...s, edits: [...s.edits, { t: s.tick, i }] })
 }
 export function encode(s: Scenario): string {
