@@ -1,0 +1,17 @@
+import { describe, expect, it } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { initial, seedBoard, next, RULES, frame, stats, plant, seek, encode, decode, validate, receipt, MAX_EDITS } from './engine'
+describe('可逆の庭',()=>{
+  it('same seed is deterministic; distinct seeds produce different initial boards',()=>{expect(seedBoard(1106)).toEqual(seedBoard(1106));expect(seedBoard(1)).not.toEqual(seedBoard(2))})
+  it.each(RULES)('%s reverses every consecutive pair exactly, without saved snapshots',rule=>{let a=Array(640).fill(0),b=seedBoard(1106);for(let t=0;t<80;t++){const c=next(a,b,rule);expect(next(c,b,rule)).toEqual(a);a=b;b=c}})
+  it('a timed intervention does not act before its timestamp; affects future',()=>{const s=plant(seek(initial(),8),336);expect(stats(seek(s,7)).changed).toBe(0);expect(stats(seek(s,8)).changed).toBe(1);expect(stats(seek(s,13)).changed).toBeGreaterThan(1);expect(receipt(seek(s,7))).toContain('まだ同じ')})
+  it('receipt names the earliest intervention even after travelling back to plant',()=>{const s=seek(plant(seek(plant(seek(initial(),8),336),3),200),12);expect(receipt(s)).toMatch(/^T3の一手/)} )
+  it('exact same cell interventions cancel rather than create duplicate IDs',()=>{const s=plant(plant(initial(),336),336);expect(frame(s)).toEqual(frame(initial()));expect(stats(s).edits).toBe(2)})
+  it('rule changes the actual causal future',()=>{const s=seek(plant(initial(),336),11);expect(frame({...s,rule:'wave'})).not.toEqual(frame({...s,rule:'life'}));expect(frame({...s,rule:'weave'})).not.toEqual(frame({...s,rule:'wave'}))})
+  it('full share replay retains future events and semantic receipt',()=>{const s=seek(plant(seek(initial(),24),22),7);expect(decode(encode(s))).toEqual(s);expect(frame(seek(decode(encode(s)),48))).toEqual(frame(seek(s,48)));expect(receipt(seek(decode(encode(s)),48))).toBe(receipt(seek(s,48)))})
+  it('maximum Unicode, seed, time and 32 edits fit the decoder budget',()=>{const s=validate({...initial(),seed:999999,tick:80,note:'🧬'.repeat(80),edits:Array.from({length:32},(_,i)=>({t:80,i:639-i}))});const token=encode(s);expect(token.length).toBeLessThan(2200);expect(decode(token)).toEqual(s);expect(stats(s).changed).toBe(32)})
+  it('rejects malformed/incomplete/nested invalid share states',()=>{for(const token of ['?',btoa('{}'),btoa('[1,1,0,0,[null],"x"]'),btoa('[1,1,7,0,[],"x"]'),btoa('[1,1,0,0,[[0,999]],"x"]')])expect(()=>decode(token)).toThrow()})
+  it('public boundary rejects NaN, out of bounds, 33rd edit and oversized note',()=>{expect(()=>seek(initial(),NaN)).toThrow();expect(()=>plant(initial(),640)).toThrow();expect(()=>validate({...initial(),note:'あ'.repeat(81)})).toThrow();let s=initial();for(let i=0;i<MAX_EDITS;i++)s=plant(s,i);expect(()=>plant(s,0)).toThrow();expect(()=>validate({...initial(),edits:[null]})).toThrow()})
+  it('hostile annotation is raw text and survives replay without changing physics',()=>{const s={...initial(),note:'<img src=x onerror=alert(1)>🧬'};expect(decode(encode(s)).note).toBe(s.note);expect(frame(s)).toEqual(frame(initial()))})
+  it('CLI supports both argument shapes and rejects invalid flags',()=>{const run=(args:string[])=>execFileSync(process.execPath,['node_modules/tsx/dist/cli.mjs','scripts/scenario.ts',...args],{encoding:'utf8'});expect(run(['--seed','42','--tick','24','--edit','8,336'])).toBe(run(['--seed=42','--tick=24','--edit=8,336']));for(const args of [['--bogus=x'],['--tick=nope'],['--edit=1,2,3'],['--seed=1','--seed=2']])expect(()=>run(args)).toThrow()})
+})
